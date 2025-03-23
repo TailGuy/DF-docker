@@ -1,0 +1,40 @@
+// Discover Docker containers
+discovery.docker "docker_containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+// Relabel Docker targets
+discovery.relabel "docker_containers" {
+  targets = discovery.docker.docker_containers.targets
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    target_label = "container"
+  }
+}
+
+// Collect Docker logs from stdout/stderr
+loki.source.docker "docker_logs" {
+  host = "unix:///var/run/docker.sock"
+  targets = discovery.relabel.docker_containers.output
+  forward_to = [loki.process.process_logs.receiver]
+}
+
+// Process Docker logs
+loki.process "process_logs" {
+  stage.docker { }
+  forward_to = [loki.write.loki.receiver]
+}
+
+// Collect FastAPI log files
+loki.source.file "fastapi_logs" {
+  files = ["/fastapi-logs/*.log"]  // Matches all .log files, including the specified ones
+  forward_to = [loki.write.loki.receiver]
+  labels = { source = "fastapi_files", app = "fastapi" }
+}
+
+// Send logs to Loki
+loki.write "loki" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

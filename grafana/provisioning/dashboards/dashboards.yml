@@ -1,0 +1,25 @@
+apiVersion: 1
+providers:
+  - name: "cAdvisor Monitor Dashboard"
+    orgId: 1
+    folder: ""
+    type: file
+    updateIntervalSeconds: 600
+    options:
+      path: /etc/grafana/provisioning/dashboards/cAdvisor-monitor.json
+
+  - name: "MQTT Alerts Dashboard (Severity & Device)"
+    orgId: 1
+    folder: ""
+    type: file
+    updateIntervalSeconds: 600
+    options:
+      path: /etc/grafana/provisioning/dashboards/MQTT-Alerts-Dashboard.json
+
+  - name: "MQTT Alerts Dashboard"
+    orgId: 1
+    folder: ""
+    type: file
+    updateIntervalSeconds: 600
+    options:
+      path: /etc/grafana/provisioning/dashboards/MQTT-Alerts-Dashboard-simple.json

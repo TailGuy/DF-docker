@@ -1,0 +1,238 @@
+services:
+  # ---------------------------------------------------------------
+  # InfluxDB service
+  # ---------------------------------------------------------------
+  influxdb:
+    container_name: influxdb
+    image: influxdb:2
+    networks:
+      - monitoring                  # Attach the container to the "monitoring" network
+    env_file:
+      - .env                        # SWITCH TO EXTERNAL SECRET MANAGER!!!!!!!!
+    # environment:
+    #   - INFLUXD_ADMIN_USER=${DOCKER_INFLUXDB_INIT_USERNAME}
+    #   - INFLUXD_ADMIN_PASSWORD=${DOCKER_INFLUXDB_INIT_PASSWORD}
+    #   - INFLUXD_ADMIN_TOKEN=${DOCKER_INFLUXDB_INIT_ADMIN_TOKEN}
+    #   - INFLUXD_ORG=${DOCKER_INFLUXDB_INIT_ORG}
+    #   - INFLUXD_BUCKET=${DOCKER_INFLUXDB_INIT_BUCKET}
+    #   - INFLUXD_HOST=${DOCKER_INFLUXDB_INIT_HOST}
+    #   - INFLUXD_HTTP_BIND_ADDRESS=:${DOCKER_INFLUXDB_INIT_PORT} 
+    volumes:
+      - influxdb-storage:/var/lib/influxdb2  # Named volume to persist InfluxDB data
+    #   - ./entrypoint.sh:/entrypoint.sh:ro     # Mount custom entrypoint script (read-only)
+    # entrypoint: ["/entrypoint.sh"]  # Use our script as the container entrypoint
+    ports:
+      - "${DOCKER_INFLUXDB_INIT_PORT}:8086"
+    restart: unless-stopped         # Automatically restart unless manually stopped
+    
+    healthcheck:
+      # Use InfluxDB’s built-in /health endpoint to verify the service is up.
+      test: ["CMD", "curl", "--fail", "http://localhost:${DOCKER_INFLUXDB_INIT_PORT}/health"]
+      interval: 30s
+      timeout: 10s                  # Time to wait for a response before marking as failed
+      retries: 3                    # Number of consecutive failures before "unhealthy"
+      start_period: 30s             # Grace period before starting health checks, to let it start
+
+  # ---------------------------------------------------------------
+  # Telegraf service
+  # ---------------------------------------------------------------
+  telegraf:
+    container_name: telegraf
+    image: telegraf:latest
+    networks:
+      - monitoring
+    env_file:
+      - .env                        # Load environment variables from the .env file
+    environment:
+      - INFLUX_TOKEN=${DOCKER_INFLUXDB_INIT_ADMIN_TOKEN}  # Pass the InfluxDB admin token into the container
+    volumes:
+      - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro  # Mount telegraf.conf (read-only)
+    command: telegraf --config /etc/telegraf/telegraf.conf  
+      # Override the monitoring command to point to the config file
+    depends_on:
+      - influxdb                    # Ensure InfluxDB is started before Telegraf
+    restart: unless-stopped
+    
+    healthcheck:
+      # Simple check to confirm the Telegraf process is running
+      test: ["CMD", "pgrep", "telegraf"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ---------------------------------------------------------------
+  # Grafana
+  # ---------------------------------------------------------------
+  grafana:
+    container_name: grafana
+    image: grafana/grafana:latest
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - .env
+    environment:
+      - TZ=Etc/UTC
+      - GF_PATHS_DATA=/var/lib/grafana
+      - GF_PATHS_LOGS=/var/log/grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - grafana-log:/var/log/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    healthcheck:
+      test: ["CMD", "wget", "-O", "/dev/null", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - monitoring
+
+  # ---------------------------------------------------------------
+  # Mosquitto
+  # ---------------------------------------------------------------
+  mosquitto:
+    container_name: mosquitto
+    image: eclipse-mosquitto:latest
+    environment:
+      - TZ=${TZ:-Etc/UTC}
+    # Expose the MQTT port
+    ports:
+      - "1883:1883"
+    # Use named volumes for data and logs, no config override
+    volumes:
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-log:/mosquitto/log
+    restart: unless-stopped
+    networks:
+      - monitoring
+
+  # ---------------------------------------------------------------
+  # Portainer CE (Container management UI)
+  # ---------------------------------------------------------------
+  portainer-ce:
+    container_name: portainer-ce
+    image: portainer/portainer-ce:latest
+    ports:
+      - "8000:8000"  # Required for Portainer Edge agent
+      - "9000:9000"  # Main Portainer UI
+      - "9443:9443"  # HTTPS port for Portainer
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock  
+        # Allow Portainer to communicate with Docker engine
+      - ./volumes/portainer-ce/data:/data
+        # Persist Portainer data (users, settings, etc.)
+    restart: unless-stopped
+    networks:
+      - monitoring
+
+  # ---------------------------------------------------------------
+  # cAdvisor - Analyzes and exposes resource usage and performance data 
+  # from running containers
+  # ---------------------------------------------------------------
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    privileged: true                         # Gives cAdvisor ability to read all cgroup data
+    volumes:
+      - /:/rootfs:ro                         # Mount the root filesystem as read-only
+      - /sys:/sys:ro                         # Mount /sys directory, read-only for cgroup data
+      - /var/lib/docker:/var/lib/docker:ro   # Read-only access to Docker data
+      - /var/run:/var/run:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro  
+        # Read-only access to Docker socket, allows cAdvisor to monitor containers
+    networks:
+      - monitoring
+
+  # ---------------------------------------------------------------
+  # Prometheus - Collects metrics from cAdvisor and other endpoints
+  # ---------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest            # Official Prometheus image
+    container_name: prometheus               # Name the container "prometheus"
+    
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    ports:
+      - 9090:9090
+    restart: unless-stopped
+    volumes:
+      - ./prometheus:/etc/prometheus
+      - prom-data:/prometheus
+    depends_on:
+      - cadvisor
+    networks:
+      - monitoring
+
+  # ------------------------------------------------------------
+  # Grafana Loki - Aggregates logs from Grafana Alloy and send them to Loki
+  # ------------------------------------------------------------
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - "3100:3100"
+    networks:
+      - monitoring
+
+  # ------------------------------------------------------------
+  # Grafana Alloy - Collects logs
+  # ------------------------------------------------------------
+  alloy:
+    image: grafana/alloy:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro # docker socket
+      - ./alloy-config.alloy:/etc/alloy/config.alloy # alloy config file
+      - fastapi-logs:/fastapi-logs # the fastapi app logs
+    command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
+    ports:
+      - "12345:12345"
+    networks:
+      - monitoring
+
+# ---------------------------------------------------------------
+# FastAPI application
+# ---------------------------------------------------------------
+  app:
+    build:
+      context: ./fastapi
+      dockerfile: Dockerfile
+    container_name: fastapi-app # sets the container name to fastapi-app
+    ports:
+      - "7080:7080"
+    environment:
+      - PYTHONUNBUFFERED=1 # disables python log buffering for real-time logs
+    # env_file:
+    #   - .env              # can uncomment later to pass secrets to the app
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # allows access to the host machine
+    networks:
+      - monitoring
+    volumes:
+      - fastapi-logs:/app/logs              # mounts log files to fastapi-logs for grafana alloy
+    restart: unless-stopped
+
+
+# ---------------------------------------------------------------
+# Named volumes
+# ---------------------------------------------------------------
+volumes: # Persistent volumes keep data even if container is stopped or removed
+  influxdb-storage:
+  grafana-data:
+  grafana-log:
+  mosquitto-data:
+  mosquitto-log:
+  prom-data:
+  fastapi-logs:
+
+# ---------------------------------------------------------------
+# Docker network
+# ---------------------------------------------------------------
+networks:
+  monitoring:
+    driver: bridge  # Use a user-defined bridged network for all services

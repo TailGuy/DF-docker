@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OPC UA to MQTT to InfluxDB Converter</title>
+    <style>
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
+    <script>
+        async function fetchPost(url, data = {}) {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            return response.json();
+        }
+
+        async function toggleConverter(converter) {
+            try {
+                const data = await fetchPost(`/toggle_${converter}`);
+                alert(data.message);
+                location.reload();
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to toggle converter');
+            }
+        }
+
+        async function updateSelection(event) {
+            event.preventDefault();
+            const node_ids = Array.from(event.target.querySelectorAll('input[name="node_ids"]:checked')).map(cb => cb.value);
+            try {
+                const result = await fetchPost('/update', { node_ids });
+                alert(result.message || result.error);
+            } catch (error) {
+                console.error('Error:', error);
+                alert('An error occurred while updating the selection.');
+            }
+        }
+
+        async function addNode(event) {
+            event.preventDefault();
+            const formData = new FormData(event.target);
+            try {
+                const result = await fetch('/add_node', { method: 'POST', body: formData });
+                const data = await result.json();
+                alert(data.message || data.error);
+                if (data.message) location.reload();
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to add node');
+            }
+        }
+
+        async function updateReadInterval() {
+            const interval = document.getElementById('read_interval').value;
+            try {
+                const data = await fetchPost('/update_read_interval', {interval: parseInt(interval)});
+                alert(data.message);
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to update interval');
+            }
+        }
+
+        async function toggleBothConverters(turnOn) {
+            try {
+                const data = await fetchPost('/toggle_both_converters', {turn_on: turnOn});
+                alert(data.message);
+                location.reload();
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to toggle converters');
+            }
+        }
+    </script>
+</head>
+<body>
+    <h1>OPC UA to MQTT to InfluxDB Converter</h1>
+    <a href="/logs"><button type="button">View Logs</button></a>
+    
+    <h2>Global Controls</h2>
+    <div>
+        <label for="read_interval">OPC UA Read Interval (seconds):</label>
+        <input type="number" id="read_interval" name="read_interval" min="1" value="{{ read_interval }}">
+        <button onclick="updateReadInterval()">Update Interval</button>
+    </div>
+    <div>
+        <button onclick="toggleBothConverters(true)">Turn On Both Converters</button>
+        <button onclick="toggleBothConverters(false)">Turn Off Both Converters</button>
+    </div>
+
+    <div id="converter-status">
+        <h2>Converter Status</h2>
+        <p>OPC UA to MQTT: <span id="opcua-mqtt-status">{{ opcua_to_mqtt_status }}</span></p>
+        <button onclick="toggleConverter('opcua_to_mqtt')">Toggle OPC UA to MQTT</button>
+        
+        <p>MQTT to InfluxDB: <span id="mqtt-influx-status">{{ mqtt_to_influx_status }}</span></p>
+        <button onclick="toggleConverter('mqtt_to_influx')">Toggle MQTT to InfluxDB</button>
+    </div>
+
+    <h2>Node Selection</h2>
+    <form method="post" action="/update" onsubmit="updateSelection(event)">
+        <table>
+            <thead>
+                <tr>
+                    <th>Select</th>
+                    <th>Node ID</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for node in nodes %}
+                <tr>
+                    <td><input type="checkbox" name="node_ids" value="{{ node.node_id }}" {% if node.node_id in selected %}checked{% endif %}></td>
+                    <td>{{ node.node_id }}</td>
+                    <td>{{ node.description }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <button type="submit">Update Selection</button>
+    </form>
+
+    <h2>Add New Node</h2>
+    <form action="/add_node" method="post" onsubmit="addNode(event)">
+        <label for="node_id">Node ID:</label>
+        <input type="text" id="node_id" name="node_id" required><br><br>
+        <label for="description">Description:</label>
+        <input type="text" id="description" name="description" required><br><br>
+        <input type="submit" value="Add Node">
+    </form>
+</body>
+</html>
