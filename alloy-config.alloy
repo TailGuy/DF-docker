@@ -27,7 +27,7 @@ loki.process "process_logs" {
 
 // Collect FastAPI log files
 loki.source.file "fastapi_logs" {
-  files = ["/fastapi-logs/*.log"]  // Matches all .log files, including the specified ones
+  targets = ["/fastapi-logs/*.log"]  // Matches all .log files, including the specified ones
   forward_to = [loki.write.loki.receiver]
   labels = { source = "fastapi_files", app = "fastapi" }
 }
