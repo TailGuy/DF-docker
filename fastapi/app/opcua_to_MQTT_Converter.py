@@ -5,16 +5,16 @@ import json
 import csv
 import os
 
-OPC_SERVER_URL = "opc.tcp://host.docker.internal:4841"
+OPC_SERVER_URL = "opc.tcp://100.94.111.58:4841"
 MQTT_BROKER = "host.docker.internal"
 MQTT_PORT = 1883
 MQTT_TOPIC = "plant1"
-SELECTED_CSV = "app/selected.csv"
+SELECTED_CSV = "app/data/selected.csv"
 DEFAULT_READ_INTERVAL = 5
 
 def read_selected_nodes():
     with open(SELECTED_CSV, mode='r') as file:
-        return [row['node_id'] for row in csv.DictReader(file)]
+        return [row['NodeId'] for row in csv.DictReader(file)]
 
 def connect_mqtt():
     client = mqtt_client.Client()
@@ -53,3 +53,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
