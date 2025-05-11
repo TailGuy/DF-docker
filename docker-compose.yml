@@ -46,13 +46,14 @@ services:
     environment:
       - INFLUX_TOKEN=${DOCKER_INFLUXDB_INIT_ADMIN_TOKEN}  # Pass the InfluxDB admin token into the container
     volumes:
-      - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro  # Mount telegraf.conf (read-only)
+      - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf  # Mount telegraf.conf (read-write)
     command: telegraf --config /etc/telegraf/telegraf.conf  
       # Override the monitoring command to point to the config file
     depends_on:
       - influxdb                    # Ensure InfluxDB is started before Telegraf
     restart: unless-stopped
-    
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # allows access to the host machine
     healthcheck:
       # Simple check to confirm the Telegraf process is running
       test: ["CMD", "pgrep", "telegraf"]
@@ -175,6 +176,8 @@ services:
   # ------------------------------------------------------------
   loki:
     image: grafana/loki:latest
+    volumes:
+      - loki_data:/loki
     ports:
       - "3100:3100"
     networks:
@@ -196,7 +199,7 @@ services:
       - monitoring
 
 # ---------------------------------------------------------------
-# FastAPI application
+# FastAPI legacy application
 # ---------------------------------------------------------------
   app:
     build:
@@ -217,6 +220,27 @@ services:
       - fastapi-logs:/app/logs              # mounts log files to fastapi-logs for grafana alloy
     restart: unless-stopped
 
+# ---------------------------------------------------------------
+# FastAPI telegraf application
+# ---------------------------------------------------------------
+  app-telegraf:
+    build:
+      context: ./fastapi-telegraf
+      dockerfile: Dockerfile
+    container_name: fastapi-telegraf-app # sets the container name to fastapi-app
+    ports:
+      - "7090:7090"
+    environment:
+      - PYTHONUNBUFFERED=1 # disables python log buffering for real-time logs
+    # env_file:
+    #   - .env              # can uncomment later to pass secrets to the app
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # allows access to the host machine
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock # Docker socket access for container management
+    networks:
+      - monitoring
+    restart: unless-stopped
 
 # ---------------------------------------------------------------
 # Named volumes
@@ -229,6 +253,7 @@ volumes: # Persistent volumes keep data even if container is stopped or removed
   mosquitto-log:
   prom-data:
   fastapi-logs:
+  loki_data:
 
 # ---------------------------------------------------------------
 # Docker network
