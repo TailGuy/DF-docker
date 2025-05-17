@@ -1,6 +1,0 @@
-fastapi
-uvicorn[standard]
-docker
-python-multipart
-jinja2
-asyncua

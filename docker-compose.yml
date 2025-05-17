@@ -203,7 +203,7 @@ services:
 # ---------------------------------------------------------------
   app:
     build:
-      context: ./fastapi
+      context: ./fastapi-app
       dockerfile: Dockerfile
     container_name: fastapi-app # sets the container name to fastapi-app
     ports:
@@ -225,7 +225,7 @@ services:
 # ---------------------------------------------------------------
   app-telegraf:
     build:
-      context: ./fastapi-telegraf
+      context: ./telegraf-app
       dockerfile: Dockerfile
     container_name: fastapi-telegraf-app # sets the container name to fastapi-app
     ports:

@@ -1,0 +1,6 @@
+[submodule "fastapi-app"]
+	path = fastapi-app
+	url = https://github.com/TheGoodGamerGuy/fastapi-app.git
+[submodule "telegraf-app"]
+	path = telegraf-app
+	url = https://github.com/TheGoodGamerGuy/FastAPI-telegraf-app.git
