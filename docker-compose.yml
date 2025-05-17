@@ -210,6 +210,7 @@ services:
       - "7080:7080"
     environment:
       - PYTHONUNBUFFERED=1 # disables python log buffering for real-time logs
+      - INFLUX_TOKEN=${DOCKER_INFLUXDB_INIT_ADMIN_TOKEN}
     # env_file:
     #   - .env              # can uncomment later to pass secrets to the app
     extra_hosts:
