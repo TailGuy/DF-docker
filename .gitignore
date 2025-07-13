@@ -1,3 +1,4 @@
 *.env
-fastapi/
-fastapi-telegraf/
+*.csv
+*.conf
+volumes/
