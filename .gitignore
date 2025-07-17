@@ -1,4 +1,5 @@
 *.env
 *.csv
-*.conf
+# Ignore configuration files only in the telegraf directory
+telegraf/*.conf
 volumes/

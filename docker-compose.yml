@@ -8,7 +8,7 @@ services:
     networks:
       - monitoring                  # Attach the container to the "monitoring" network
     env_file:
-      - .env                        # SWITCH TO EXTERNAL SECRET MANAGER!!!!!!!!
+      - .env                        #TODO SWITCH TO EXTERNAL SECRET MANAGER!!!!!!!!
     # environment:
     #   - INFLUXD_ADMIN_USER=${DOCKER_INFLUXDB_INIT_USERNAME}
     #   - INFLUXD_ADMIN_PASSWORD=${DOCKER_INFLUXDB_INIT_PASSWORD}
@@ -46,9 +46,9 @@ services:
     environment:
       - INFLUX_TOKEN=${DOCKER_INFLUXDB_INIT_ADMIN_TOKEN}  # Pass the InfluxDB admin token into the container
     volumes:
-      - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf  # Mount telegraf.conf (read-write)
-    command: telegraf --config /etc/telegraf/telegraf.conf  
-      # Override the monitoring command to point to the config file
+      # - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf  # Mount telegraf.conf (read-write)
+      - ./telegraf:/etc/telegraf
+    command: telegraf --config /etc/telegraf/telegraf.conf  # Override the monitoring command to point to the config file
     depends_on:
       - influxdb                    # Ensure InfluxDB is started before Telegraf
     restart: unless-stopped
@@ -200,6 +200,7 @@ services:
 
 # ---------------------------------------------------------------
 # FastAPI legacy application
+# FastAPI legacy application
 # ---------------------------------------------------------------
   app:
     build:
@@ -226,7 +227,7 @@ services:
 # ---------------------------------------------------------------
   app-telegraf:
     build:
-      context: ./telegraf-app
+      context: ./fastapi-telegraf
       dockerfile: Dockerfile
     container_name: fastapi-telegraf-app # sets the container name to fastapi-app
     ports:
@@ -239,6 +240,8 @@ services:
       - "host.docker.internal:host-gateway" # allows access to the host machine
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock # Docker socket access for container management
+      - telegraf-configs:/app/configs
+      - ./telegraf:/app/shared_config
     networks:
       - monitoring
     restart: unless-stopped
@@ -255,6 +258,7 @@ volumes: # Persistent volumes keep data even if container is stopped or removed
   prom-data:
   fastapi-logs:
   loki_data:
+  telegraf-configs:
 
 # ---------------------------------------------------------------
 # Docker network

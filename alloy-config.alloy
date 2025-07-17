@@ -28,6 +28,7 @@ loki.process "process_logs" {
 // Collect FastAPI log files
 loki.source.file "fastapi_logs" {
   targets = [{ __path__ = "/fastapi-logs/*.log", source = "fastapi_files", app = "fastapi" }]
+  targets = [{ __path__ = "/fastapi-logs/*.log", source = "fastapi_files", app = "fastapi" }]
   forward_to = [loki.write.loki.receiver]
 }
 
