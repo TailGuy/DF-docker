@@ -227,9 +227,9 @@ services:
 # ---------------------------------------------------------------
   app-telegraf:
     build:
-      context: ./fastapi-telegraf
+      context: ./telegraf-app
       dockerfile: Dockerfile
-    container_name: fastapi-telegraf-app # sets the container name to fastapi-app
+    container_name: telegraf-app # sets the container name to telegraf-app
     ports:
       - "7090:7090"
     environment:
