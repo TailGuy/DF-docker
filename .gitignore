@@ -3,3 +3,4 @@
 # Ignore configuration files only in the telegraf directory
 telegraf/*.conf
 volumes/
+.venv
