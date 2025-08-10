@@ -51,7 +51,8 @@ services:
     command: telegraf --config /etc/telegraf/telegraf.conf  # Override the monitoring command to point to the config file
     depends_on:
       - influxdb                    # Ensure InfluxDB is started before Telegraf
-    restart: unless-stopped
+      # - mosquitto:
+    restart: on-failure:5
     extra_hosts:
       - "host.docker.internal:host-gateway" # allows access to the host machine
     healthcheck:
@@ -110,6 +111,12 @@ services:
     restart: unless-stopped
     networks:
       - monitoring
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-t", "$$SYS/broker/version", "-C", "1", "-h", "localhost", "-p", "1883"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   # ---------------------------------------------------------------
   # Portainer CE (Container management UI)
@@ -176,21 +183,26 @@ services:
   # ------------------------------------------------------------
   loki:
     image: grafana/loki:latest
+    container_name: loki
+    # command: ["-config.file=/etc/loki/config.yml", "-log.level=warn"]
     volumes:
+      # - ./loki/loki-config.yml:/etc/loki/config.yml
       - loki_data:/loki
     ports:
       - "3100:3100"
     networks:
       - monitoring
+    restart: unless-stopped
 
   # ------------------------------------------------------------
   # Grafana Alloy - Collects logs
   # ------------------------------------------------------------
   alloy:
     image: grafana/alloy:latest
+    container_name: alloy
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro # docker socket
-      - ./alloy-config.alloy:/etc/alloy/config.alloy # alloy config file
+      - ./alloy/alloy-config.alloy:/etc/alloy/config.alloy # alloy config file
       - fastapi-logs:/fastapi-logs # the fastapi app logs
     command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
     ports:
