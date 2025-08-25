@@ -23,7 +23,7 @@ run the project
 docker compose up --build -d
 ```
 
-> [!INFO]
+
 > to stop the project run
 > ```
 > docker compose down
