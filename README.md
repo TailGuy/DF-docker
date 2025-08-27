@@ -4,7 +4,7 @@
 
 Clone repository with submodules
 ```
-git clone --recursive git@github.com:TailGuy/DF-docker.git
+git clone --recursive https://github.com/TailGuy/DF-docker.git
 ```
 
 cd into the project directory
