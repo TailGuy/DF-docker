@@ -1,6 +1,9 @@
 # DF-docker
+This project is used to 
 
-## Installation
+## Gettting started
+
+### Installation
 
 Clone repository with submodules
 ```
@@ -11,6 +14,8 @@ cd into the project directory
 ```
 cd DF-docker
 ```
+
+### Setting up your environment variables
 
 Create `.env` file from the template file `.envtemplate` and change all of the `changme` parts
 ```
