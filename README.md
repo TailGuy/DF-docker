@@ -32,7 +32,7 @@ cd DF-docker
 ```
 
 ### Setting up your environment variables
-Create `.env` file from the template file `.envtemplate` and change all of the `changme`  parts, such as InfluxDB credentials and tokens.
+Create `.env` file from the template file `.envtemplate` and change all of the `changeme`  parts, such as InfluxDB credentials and tokens.
 ```
 cp ./.envtemplate ./.env
 sudo nano .env
