@@ -11,13 +11,14 @@ This is a Docker Compose-based project that automates the deployment of a data h
 
 > [!NOTE]
 > Make sure to set up your environment variables before running the docker compose script.
+> You can check logs for applications through Grafana: http://localhost:3000/a/grafana-lokiexplore-app/
 
 ## Prerequisites
 - Docker (version 20.10+ recommended)
 - Docker Compose (version 2.0+ recommended)
 - Git (for cloning the repository)
 
-## Getting started
+## Getting Started
 
 ### Installation
 Clone the repository:
