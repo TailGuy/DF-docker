@@ -38,12 +38,12 @@ sudo nano .env
 ```
 
 ### Running the docker compose script
-run the project
+Build and run the project in detached mode:
 ```
 docker compose up --build -d
 ```
 
-to stop the project run
+To stop the project:
 ```
 docker compose down
 ```
