@@ -10,7 +10,7 @@ This is a Docker Compose-based project that automates the deployment of a data h
 - [Services](#services)
 
 > [!NOTE]
-> Make sure to set up your environment variables before running the docker compose script.  
+> Make sure to set up your environment variables before running the docker compose script. [Setting up your environment variables](#setting-up-your-environment-variables)  
 > You can check logs for applications through Grafana: http://localhost:3000/a/grafana-lokiexplore-app/
 
 ## Prerequisites
