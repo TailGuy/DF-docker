@@ -1,6 +1,7 @@
 # DF-docker
 This is a Docker Compose-based project that automates the deployment of a data historian and protocol bridge for transforming OPC UA data to MQTT. It integrates time-series storage, monitoring, and visualization tools to support Industrial IoT (IIoT) applications, enabling real-time data collection, protocol conversion, and system oversight.
 
+- [Prerequisites](#Prerequisites)
 - [Getting Started](#getting-started)
   - [Installation](#installation)
   - [Setting up your environment variables](#setting-up-your-environment-variables)
@@ -10,6 +11,11 @@ This is a Docker Compose-based project that automates the deployment of a data h
 
 > [!NOTE]
 > Make sure to set up your environment variables before running the docker compose script.
+
+## Prerequisites
+- Docker (version 20.10+ recommended)
+- Docker Compose (version 2.0+ recommended)
+- Git (for cloning the repository)
 
 ## Getting started
 
