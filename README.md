@@ -41,3 +41,18 @@ Access key interfaces:
 - Portainer: http://localhost:9000
 - FastAPI Telegraf Manager: http://localhost:7090
 - FastAPI Legacy App: http://localhost:7080
+
+
+## Services
+The `docker-compose.yml` defines the following services, each configured for monitoring, data handling, and IIoT integration:
+- **influxdb**: Time-series database for persisting metrics and data from Telegraf and other sources.
+- **telegraf**: Metrics collection agent that reads from OPC UA servers, processes data, and forwards to InfluxDB and MQTT.
+- **grafana**: Visualization platform for dashboards and alerts, connected to InfluxDB, Prometheus, and Loki.
+- **mosquitto**: Eclipse Mosquitto MQTT broker for lightweight messaging between services and external IIoT devices.
+- **portainer-ce**: Web-based UI for managing Docker containers, images, and volumes.
+- **cadvisor**: Container Advisor for analyzing and exposing resource usage and performance metrics from running containers.
+- **prometheus**: Metrics storage and querying system that collects data from cAdvisor and other endpoints.
+- **loki**: Grafana Loki for aggregating and querying logs from services like Alloy.
+- **alloy**: Grafana Alloy agent for collecting logs from Docker and the FastAPI app, forwarding them to Loki.
+- **app**: Legacy FastAPI application for data processing (e.g., MQTT to InfluxDB conversion). https://github.com/TailGuy/fastapi-app
+- **app-telegraf**: FastAPI application for managing the Telegraf container, including config uploads, interval changes, and status monitoring.  https://github.com/TailGuy/telegraf-app
