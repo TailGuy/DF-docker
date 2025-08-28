@@ -1,4 +1,5 @@
 # DF-docker
+![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)
 This is a Docker Compose-based project that automates the deployment of a data historian and protocol bridge for transforming OPC UA data to MQTT. It integrates time-series storage, monitoring, and visualization tools to support Industrial IoT (IIoT) applications, enabling real-time data collection, protocol conversion, and system oversight.
 
 - [Prerequisites](#Prerequisites)
