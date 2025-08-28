@@ -9,7 +9,7 @@ This is a Docker Compose-based project that automates the deployment of a data h
 - [Services](#services)
 
 > [!NOTE]
-> Make sure to set up your environment variables before running the docker compose script
+> Make sure to set up your environment variables before running the docker compose script.
 
 ## Gettting started
 
