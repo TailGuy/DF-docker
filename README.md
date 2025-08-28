@@ -1,5 +1,8 @@
 # DF-docker
-This project is used to 
+This project is used to automatically install and set up a data historian and data transformation from OPC UA to MQTT and monitoring.
+
+> [!NOTE]
+> Make sure to set up your environment variables before running the docker compose script
 
 ## Gettting started
 
@@ -30,8 +33,7 @@ run the project
 docker compose up --build -d
 ```
 
-> [!NOTE]
-> to stop the project run
-> ```
-> docker compose down
-> ```
+to stop the project run
+```
+docker compose down
+```
