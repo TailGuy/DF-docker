@@ -44,6 +44,9 @@ Build and run the project in detached mode:
 docker compose up --build -d
 ```
 
+Access portainer to set up the admin account:
+http://localhost:9000
+
 To stop the project:
 ```
 docker compose down
