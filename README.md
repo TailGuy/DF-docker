@@ -50,22 +50,25 @@ docker compose down
 
 ### Usage
 Access key interfaces:
-- Grafana: http://localhost:3000
-- Portainer: http://localhost:9000
-- FastAPI Telegraf Manager: http://localhost:7090
-- FastAPI Legacy App: http://localhost:7080
+- Grafana: http://localhost:3000 (logs, dashboards and visualizations)
+- Portainer: http://localhost:9000 (container management)
+- FastAPI Telegraf Manager: http://localhost:7090 (Telegraf config and status)
+- FastAPI Legacy App: http://localhost:7080 (Legacy app)
 
 
 ## Services
 The `docker-compose.yml` defines the following services, each configured for monitoring, data handling, and IIoT integration:
-- **influxdb**: Time-series database for persisting metrics and data from Telegraf and other sources.
-- **telegraf**: Metrics collection agent that reads from OPC UA servers, processes data, and forwards to InfluxDB and MQTT.
-- **grafana**: Visualization platform for dashboards and alerts, connected to InfluxDB, Prometheus, and Loki.
-- **mosquitto**: Eclipse Mosquitto MQTT broker for lightweight messaging between services and external IIoT devices.
-- **portainer-ce**: Web-based UI for managing Docker containers, images, and volumes.
-- **cadvisor**: Container Advisor for analyzing and exposing resource usage and performance metrics from running containers.
-- **prometheus**: Metrics storage and querying system that collects data from cAdvisor and other endpoints.
-- **loki**: Grafana Loki for aggregating and querying logs from services like Alloy.
-- **alloy**: Grafana Alloy agent for collecting logs from Docker and the FastAPI app, forwarding them to Loki.
-- **app**: Legacy FastAPI application for data processing (e.g., MQTT to InfluxDB conversion). https://github.com/TailGuy/fastapi-app
-- **app-telegraf**: FastAPI application for managing the Telegraf container, including config uploads, interval changes, and status monitoring.  https://github.com/TailGuy/telegraf-app
+
+| Service       | Description                                                                 | Ports       | Dependencies          | Volumes/Persistence          |
+|---------------|-----------------------------------------------------------------------------|-------------|-----------------------|------------------------------|
+| **influxdb** | Time-series database for metrics from Telegraf.                             | 8086       | None                  | influxdb-storage            |
+| **telegraf** | Collects OPC UA data, forwards to InfluxDB/MQTT.                            | None       | influxdb, mosquitto   | telegraf-configs            |
+| **grafana**  | Dashboards and alerts from InfluxDB/Prometheus/Loki.                        | 3000       | None                  | grafana-data, grafana-log   |
+| **mosquitto**| MQTT broker for IIoT messaging.                                             | 1883       | None                  | mosquitto-data, mosquitto-log |
+| **portainer-ce** | UI for Docker management.                                               | 8000, 9000, 9443 | None              | portainer-ce/data           |
+| **cadvisor** | Container resource monitoring.                                              | 8080       | None                  | Host mounts (/sys, etc.)    |
+| **prometheus**| Metrics querying from cAdvisor.                                           | 9090       | cadvisor              | prom-data                   |
+| **loki**     | Log aggregation for Alloy.                                                  | 3100       | None                  | loki_data                   |
+| **alloy**    | Log collection to Loki.                                                     | 12345      | None                  | fastapi-logs                |
+| **app**      | Legacy FastAPI for MQTT to InfluxDB. [Repo](https://github.com/TailGuy/fastapi-app) | 7080 | None                  | fastapi-logs                |
+| **app-telegraf** | FastAPI for Telegraf management. [Repo](https://github.com/TailGuy/telegraf-app) | 7090 | None                  | telegraf-configs            |
