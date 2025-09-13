@@ -63,6 +63,14 @@ services:
       retries: 3
       start_period: 30s
 
+
+  telegraf-test-new:
+    image: telegraf:latest
+    volumes:
+      - ./telegraf-test.conf:/etc/telegraf/telegraf.conf:ro
+    environment:
+      - MQTT_BROKER_URL=mqtt://mqtt-broker:1883  # Customized for different output
+
   # ---------------------------------------------------------------
   # Grafana
   # ---------------------------------------------------------------
