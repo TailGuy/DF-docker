@@ -63,13 +63,35 @@ services:
       retries: 3
       start_period: 30s
 
-
-  telegraf-test-new:
+  # ---------------------------------------------------------------
+  # Telegraf test service (additional instance for mqtt to InfluxDB test)
+  # ---------------------------------------------------------------
+  telegraf-test:
+    container_name: telegraf-test
     image: telegraf:latest
-    volumes:
-      - ./telegraf-test.conf:/etc/telegraf/telegraf.conf:ro
+    networks:
+      - monitoring
+    env_file:
+      - .env                        # Load environment variables from the .env file
     environment:
-      - MQTT_BROKER_URL=mqtt://mqtt-broker:1883  # Customized for different output
+      - INFLUX_TOKEN=${DOCKER_INFLUXDB_INIT_ADMIN_TOKEN}  # Pass the InfluxDB admin token into the container
+    volumes:
+      # - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf  # Mount telegraf.conf (read-write)
+      - ./telegraf-test:/etc/telegraf
+    command: telegraf --config /etc/telegraf/telegraf.conf  # Override the monitoring command to point to the config file
+    depends_on:
+      - influxdb                    # Ensure InfluxDB is started before Telegraf
+      # - mosquitto:
+    restart: on-failure:5
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # allows access to the host machine
+    healthcheck:
+      # Simple check to confirm the Telegraf process is running
+      test: ["CMD", "pgrep", "telegraf-test"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   # ---------------------------------------------------------------
   # Grafana
