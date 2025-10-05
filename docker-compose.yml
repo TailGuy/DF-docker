@@ -34,10 +34,10 @@ services:
       start_period: 30s             # Grace period before starting health checks, to let it start
 
   # ---------------------------------------------------------------
-  # Telegraf service
+  # Telegraf OPCUA-MQTT-InfluxDB service (OPC UA to MQTT to InfluxDB)
   # ---------------------------------------------------------------
-  telegraf:
-    container_name: telegraf
+  telegraf-opcua:
+    container_name: telegraf-opcua
     image: telegraf:latest
     networks:
       - monitoring
@@ -47,7 +47,7 @@ services:
       - INFLUX_TOKEN=${DOCKER_INFLUXDB_INIT_ADMIN_TOKEN}  # Pass the InfluxDB admin token into the container
     volumes:
       # - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf  # Mount telegraf.conf (read-write)
-      - ./telegraf:/etc/telegraf
+      - ./telegraf/telegraf-opcua:/etc/telegraf
     command: telegraf --config /etc/telegraf/telegraf.conf  # Override the monitoring command to point to the config file
     depends_on:
       - influxdb                    # Ensure InfluxDB is started before Telegraf
@@ -57,17 +57,17 @@ services:
       - "host.docker.internal:host-gateway" # allows access to the host machine
     healthcheck:
       # Simple check to confirm the Telegraf process is running
-      test: ["CMD", "pgrep", "telegraf"]
+      test: ["CMD", "pgrep", "telegraf-opcua"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
 
   # ---------------------------------------------------------------
-  # Telegraf test service (additional instance for mqtt to InfluxDB test)
+  # Telegraf MQTT-InfluxDB service (additional instance for MQTT to InfluxDB)
   # ---------------------------------------------------------------
-  telegraf-test:
-    container_name: telegraf-test
+  telegraf-mqtt:
+    container_name: telegraf-mqtt
     image: telegraf:latest
     networks:
       - monitoring
@@ -77,7 +77,7 @@ services:
       - INFLUX_TOKEN=${DOCKER_INFLUXDB_INIT_ADMIN_TOKEN}  # Pass the InfluxDB admin token into the container
     volumes:
       # - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf  # Mount telegraf.conf (read-write)
-      - ./telegraf-test:/etc/telegraf
+      - ./telegraf/telegraf-mqtt:/etc/telegraf
     command: telegraf --config /etc/telegraf/telegraf.conf  # Override the monitoring command to point to the config file
     depends_on:
       - influxdb                    # Ensure InfluxDB is started before Telegraf
@@ -87,7 +87,37 @@ services:
       - "host.docker.internal:host-gateway" # allows access to the host machine
     healthcheck:
       # Simple check to confirm the Telegraf process is running
-      test: ["CMD", "pgrep", "telegraf-test"]
+      test: ["CMD", "pgrep", "telegraf-mqtt"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+  
+  # ---------------------------------------------------------------
+  # Telegraf json test service (another instance for MQTT to InfluxDB with json parsing)
+  # ---------------------------------------------------------------
+  telegraf-mqtt-json:
+    container_name: telegraf-mqtt-json
+    image: telegraf:latest
+    networks:
+      - monitoring
+    env_file:
+      - .env                        # Load environment variables from the .env file
+    environment:
+      - INFLUX_TOKEN=${DOCKER_INFLUXDB_INIT_ADMIN_TOKEN}  # Pass the InfluxDB admin token into the container
+    volumes:
+      # - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf  # Mount telegraf.conf (read-write)
+      - ./telegraf/telegraf-mqtt-json:/etc/telegraf
+    command: telegraf --config /etc/telegraf/telegraf.conf  # Override the monitoring command to point to the config file
+    depends_on:
+      - influxdb                    # Ensure InfluxDB is started before Telegraf
+      # - mosquitto:
+    restart: on-failure:5
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # allows access to the host machine
+    healthcheck:
+      # Simple check to confirm the Telegraf process is running
+      test: ["CMD", "pgrep", "telegraf-mqtt-json"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -112,7 +142,7 @@ services:
     volumes:
       - grafana-data:/var/lib/grafana
       - grafana-log:/var/log/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./config/grafana/provisioning:/etc/grafana/provisioning
     healthcheck:
       test: ["CMD", "wget", "-O", "/dev/null", "http://localhost:3000"]
       interval: 30s
@@ -138,7 +168,7 @@ services:
     volumes:
       - mosquitto-data:/mosquitto/data
       - mosquitto-log:/mosquitto/log
-      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - ./config/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
     restart: unless-stopped
     networks:
       - monitoring
@@ -202,7 +232,7 @@ services:
       - 9090:9090
     restart: unless-stopped
     volumes:
-      - ./prometheus:/etc/prometheus
+      - ./config/prometheus:/etc/prometheus
       - prom-data:/prometheus
     depends_on:
       - cadvisor
@@ -217,7 +247,7 @@ services:
     container_name: loki
     # command: ["-config.file=/etc/loki/config.yml", "-log.level=warn"]
     volumes:
-      # - ./loki/loki-config.yml:/etc/loki/config.yml
+      # - ./config/loki/loki-config.yml:/etc/loki/config.yml
       - loki_data:/loki
     ports:
       - "3100:3100"
@@ -233,7 +263,7 @@ services:
     container_name: alloy
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro # docker socket
-      - ./alloy/alloy-config.alloy:/etc/alloy/config.alloy # alloy config file
+      - ./config/alloy/alloy-config.alloy:/etc/alloy/config.alloy # alloy config file
       - fastapi-logs:/fastapi-logs # the fastapi app logs
     command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
     ports:
@@ -241,36 +271,13 @@ services:
     networks:
       - monitoring
 
-# ---------------------------------------------------------------
-# FastAPI legacy application
-# FastAPI legacy application
-# ---------------------------------------------------------------
-  app:
-    build:
-      context: ./fastapi-app
-      dockerfile: Dockerfile
-    container_name: fastapi-app # sets the container name to fastapi-app
-    ports:
-      - "7080:7080"
-    environment:
-      - PYTHONUNBUFFERED=1 # disables python log buffering for real-time logs
-      - INFLUX_TOKEN=${DOCKER_INFLUXDB_INIT_ADMIN_TOKEN}
-    # env_file:
-    #   - .env              # can uncomment later to pass secrets to the app
-    extra_hosts:
-      - "host.docker.internal:host-gateway" # allows access to the host machine
-    networks:
-      - monitoring
-    volumes:
-      - fastapi-logs:/app/logs              # mounts log files to fastapi-logs for grafana alloy
-    restart: unless-stopped
 
 # ---------------------------------------------------------------
 # FastAPI telegraf application
 # ---------------------------------------------------------------
   app-telegraf:
     build:
-      context: ./telegraf-app
+      context: ./telegraf/telegraf-app
       dockerfile: Dockerfile
     container_name: telegraf-app # sets the container name to telegraf-app
     ports:
@@ -284,7 +291,9 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock # Docker socket access for container management
       - telegraf-configs:/app/configs
-      - ./telegraf:/app/shared_config
+      - ./telegraf/telegraf-opcua:/app/shared_opcua
+      - ./telegraf/telegraf-mqtt:/app/shared_mqtt
+      - ./telegraf/telegraf-mqtt-json:/app/shared_mqtt_json
     networks:
       - monitoring
     restart: unless-stopped

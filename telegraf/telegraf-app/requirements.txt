@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+docker
+python-multipart
+jinja2
+asyncua
+pydantic
+pydantic-settings
+aiofiles
+tomlkit==0.13.3
