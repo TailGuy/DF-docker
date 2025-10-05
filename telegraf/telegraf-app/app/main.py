@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse
 from pydantic_settings import BaseSettings
 from telegraf_config_generator import TelegrafConfigGenerator
 from telegraf_mqtt_config_generator import TelegrafMQTTConfigGenerator
+from telegraf_mqtt_json_config_generator import TelegrafMqttJsonConfigGenerator
 
 # --- Configuration & Logging Setup ---
 SHARED_OPCUA_PATH = "/app/shared_opcua"
@@ -153,15 +154,15 @@ def get_telegraf_status_details(container: docker.models.containers.Container) -
         "recent_logs": formatted_logs
     }
 
-async def change_agent_interval(new_interval: str):
+async def change_agent_interval(new_interval: str, config_path: str):
     """
-    Reads, modifies line-by-line, and writes the telegraf.conf with a new agent interval.
+    Reads, modifies line-by-line, and writes a telegraf.conf with a new agent interval.
     This approach is more robust than a single multi-line regex.
     """
-    logger.info(f"Attempting to change agent interval to '{new_interval}' in '{SHARED_OPCUA_CONFIG_PATH}'.")
+    logger.info(f"Attempting to change agent interval to '{new_interval}' in '{config_path}'.")
 
     try:
-        async with aiofiles.open(SHARED_OPCUA_CONFIG_PATH, "r", encoding="utf-8") as f:
+        async with aiofiles.open(config_path, "r", encoding="utf-8") as f:
             lines = await f.readlines()
     except Exception as e:
         logger.error(f"Failed to read config file for modification: {e}", exc_info=True)
@@ -195,7 +196,9 @@ async def change_agent_interval(new_interval: str):
                 break # Essential: only replace the first one
 
         if not found_and_replaced:
-            raise ValueError("Config is malformed: 'interval' key not found in '[agent]' section.")
+            # If not found, add it under [agent]
+            lines.insert(agent_section_start_index + 1, f'  interval = "{new_interval}"\n')
+            logger.info(f"'interval' key not found in '[agent]' section, adding it.")
 
     except ValueError as e:
         logger.error(str(e))
@@ -203,26 +206,27 @@ async def change_agent_interval(new_interval: str):
 
     # Write the modified lines back to the file
     try:
-        async with aiofiles.open(SHARED_OPCUA_CONFIG_PATH, "w", encoding="utf-8") as f:
+        async with aiofiles.open(config_path, "w", encoding="utf-8") as f:
             await f.writelines(lines)
         logger.info(f"Successfully updated agent interval to '{new_interval}'.")
     except Exception as e:
         logger.error(f"Failed to write updated config file: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to write updated config file: {e}")
 
-def check_csv_exists() -> bool:
+
+def check_csv_exists(path: str) -> bool:
     """
-    Checks if the shared nodes CSV file exists.
+    Checks if a CSV file exists at the given path.
     """
     try:
-        file_exists = os.path.exists(SHARED_OPCUA_NODES_PATH)
+        file_exists = os.path.exists(path)
     except Exception as e:
-        logger.error(f"Error checking if CSV file exists: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error checking CSV file existence: {e}")
+        logger.error(f"Error checking if file exists at {path}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error checking file existence: {e}")
     return file_exists
 
-# --- Telegraf configuration generator class ---
-
+# --- Telegraf configuration generator class (OPCUA) ---
+# This class remains unchanged from your provided file.
 class TelegrafConfigGenerator:
     """
     Generates Telegraf configuration for OPC UA nodes from a CSV file,
@@ -485,7 +489,6 @@ class TelegrafConfigGenerator:
             logger.info(f"Configuration file: {self.output_file_path}")
             logger.info("-------------------------")
 
-
 # --- API Endpoints ---
 
 @app.get("/", response_class=HTMLResponse, tags=["Web Interface"])
@@ -524,7 +527,7 @@ async def root(request: Request):
     try:
         container = get_telegraf_container()
         telegraf_status = get_telegraf_status_details(container)
-        file_exists = check_csv_exists()
+        file_exists = check_csv_exists(SHARED_OPCUA_NODES_PATH)
     except HTTPException as e:
         telegraf_status = {"status": "error", "error": e.detail}
     except Exception as e:
@@ -583,7 +586,7 @@ async def set_telegraf_interval(
 
     # 2. Modify the configuration file
     try:
-        await change_agent_interval(interval)
+        await change_agent_interval(interval, SHARED_OPCUA_CONFIG_PATH)
     except HTTPException as e:
         # If the file modification fails, redirect with that error
         safe_error_message = quote(e.detail)
@@ -733,7 +736,7 @@ async def upload_csv_for_config(
             logger.info(f"Writing uploaded CSV content to {SHARED_OPCUA_NODES_PATH}.")
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             try:
-                if check_csv_exists():
+                if check_csv_exists(SHARED_OPCUA_NODES_PATH):
                     os.rename(SHARED_OPCUA_NODES_PATH, SHARED_OPCUA_PATH + f"/nodes_backup_{timestamp}.csv")
                     nodes_csv_backed_up = True
                 else:
@@ -789,18 +792,22 @@ async def export_nodes_csv():
 
 @app.get("/export_backup/{filename}")
 async def export_backup(filename: str):
+    # Determine the correct directory based on the filename prefix
     if filename.startswith("nodes_backup_") and filename.endswith(".csv"):
         file_path = os.path.join(SHARED_OPCUA_PATH, filename)
     elif filename.startswith("nodes-test_backup_") and filename.endswith(".csv"):
         file_path = os.path.join(SHARED_MQTT_PATH, filename)
+    elif filename.startswith("nodes-mqtt-json_backup_") and filename.endswith(".csv"):
+        file_path = os.path.join(SHARED_MQTT_JSON_PATH, filename)
     else:
-        raise HTTPException(status_code=404, detail="File not found")
+        raise HTTPException(status_code=400, detail="Invalid backup filename format.")
     
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File not found")
     
     logger.info(f"Exporting backup CSV file: {filename}")
     return FileResponse(file_path, filename=filename)
+
 
 @app.get("/csvdata", response_class=HTMLResponse, tags=["CSV"])
 async def get_csv_data(request: Request):
@@ -818,12 +825,7 @@ async def get_csv_data(request: Request):
         "rows": rows
     })
 
-
-
-
-
-
-# --- Telegraf-Test Specific Paths ---
+# --- Telegraf-MQTT (Test) Specific Paths ---
 SHARED_MQTT_PATH = "/app/shared_mqtt"
 SHARED_MQTT_CONFIG_PATH = "/app/shared_mqtt/telegraf.conf"
 SHARED_MQTT_NODES_PATH = "/app/shared_mqtt/nodes-mqtt.csv"
@@ -1083,10 +1085,6 @@ async def export_nodes_csv_test():
         logger.error(f"Failed to export nodes-test CSV file from {SHARED_MQTT_NODES_PATH}.")
         raise HTTPException(status_code=404, detail="Nodes-test CSV file not found.")
 
-# Note: export_backup already exists and handles /export_backup/{filename}; extend its check to allow nodes-test_backup_
-# Replace the existing if not filename.startswith("nodes_backup_") check with:
-# if not (filename.startswith("nodes_backup_") or filename.startswith("nodes-test_backup_")) or not filename.endswith(".csv"):
-
 @app.get("/csvdata-test", response_class=HTMLResponse, tags=["CSV-Test"])
 async def get_csv_data_test(request: Request):
     if not os.path.exists(SHARED_MQTT_NODES_PATH):
@@ -1096,6 +1094,251 @@ async def get_csv_data_test(request: Request):
         reader = csv.reader(f)
         headers = next(reader, None)  # Get headers; None if empty
         rows = list(reader)  # Get all data rows
+    
+    return templates.TemplateResponse("csv_table.html", {
+        "request": request,
+        "headers": headers or [],
+        "rows": rows
+    })
+
+# --- Telegraf-MQTT-JSON Specific Paths ---
+SHARED_MQTT_JSON_PATH = "/app/shared_mqtt_json"
+SHARED_MQTT_JSON_CONFIG_PATH = "/app/shared_mqtt_json/telegraf.conf"
+SHARED_MQTT_JSON_NODES_PATH = "/app/shared_mqtt_json/nodes-mqtt-json.csv"
+
+class SettingsMqttJson(BaseSettings):
+    telegraf_container_name: str = "telegraf-mqtt-json"
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+
+settings_mqtt_json = SettingsMqttJson()
+
+def get_telegraf_mqtt_json_container() -> docker.models.containers.Container:
+    """Dependency to get the Telegraf-MQTT-JSON container object."""
+    logger.info(f"Attempting to get container '{settings_mqtt_json.telegraf_container_name}'...")
+    try:
+        container = docker_client.containers.get(settings_mqtt_json.telegraf_container_name)
+        logger.info(f"Successfully retrieved container '{container.name}' (ID: {container.short_id}).")
+        return container
+    except docker.errors.NotFound:
+        logger.error(f"Container '{settings_mqtt_json.telegraf_container_name}' not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Container '{settings_mqtt_json.telegraf_container_name}' not found"
+        )
+    except docker.errors.APIError as e:
+        logger.error(f"Docker API error while getting container: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Docker API error: {str(e)}"
+        )
+
+@app.get("/telegraf-mqtt-json", response_class=HTMLResponse, tags=["UI-MQTT-JSON"])
+async def root_mqtt_json(request: Request):
+    """Renders the main dashboard for Telegraf-MQTT-JSON."""
+    fastapi_status = {
+        "status": "Running",
+        "uptime": str(datetime.timedelta(seconds=int(time.time() - START_TIME))),
+        "started_at": datetime.datetime.fromtimestamp(START_TIME).isoformat()
+    }
+    
+    try:
+        container = get_telegraf_mqtt_json_container()
+        telegraf_status = get_telegraf_status_details(container)
+    except HTTPException as e:
+        telegraf_status = {"status": "error", "error": e.detail, "running": False}
+
+    backups = []
+    if os.path.exists(SHARED_MQTT_JSON_PATH):
+        for file in os.listdir(SHARED_MQTT_JSON_PATH):
+            if file.startswith("nodes-mqtt-json_backup_") and file.endswith(".csv"):
+                file_path = os.path.join(SHARED_MQTT_JSON_PATH, file)
+                date = datetime.datetime.fromtimestamp(os.path.getmtime(file_path)).isoformat()
+                backups.append({"filename": file, "date": date})
+    backups.sort(key=lambda x: x["date"], reverse=True)
+    
+    file_exists = os.path.exists(SHARED_MQTT_JSON_NODES_PATH)
+    
+    success_message = request.query_params.get("success")
+    error_message = request.query_params.get("error")
+    
+    return templates.TemplateResponse("index-mqtt-json.html", {
+        "request": request,
+        "fastapi_status": fastapi_status,
+        "telegraf_status": telegraf_status,
+        "backups": backups,
+        "file_exists": file_exists,
+        "success_message": success_message,
+        "error_message": error_message
+    })
+
+@app.get("/telegraf-mqtt-json/config", response_class=PlainTextResponse, tags=["Telegraf-MQTT-JSON"])
+async def view_telegraf_config_mqtt_json():
+    """Returns the current Telegraf-MQTT-JSON configuration file."""
+    logger.info("Fetching Telegraf-MQTT-JSON configuration file.")
+    try:
+        async with aiofiles.open(SHARED_MQTT_JSON_CONFIG_PATH, mode='r') as f:
+            content = await f.read()
+        return content
+    except FileNotFoundError:
+        logger.error(f"Configuration file '{SHARED_MQTT_JSON_CONFIG_PATH}' not found.")
+        raise HTTPException(status_code=404, detail="Configuration file not found.")
+    except Exception as e:
+        logger.error(f"Error reading configuration file: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error reading configuration file: {e}")
+
+@app.post("/telegraf-mqtt-json/change-interval", tags=["Telegraf-MQTT-JSON"])
+async def change_agent_interval_mqtt_json(
+    request: Request,
+    new_interval: str = Form(...),
+    container: docker.models.containers.Container = Depends(get_telegraf_mqtt_json_container)
+):
+    """Changes the agent interval in the Telegraf-MQTT-JSON config and restarts."""
+    logger.info(f"Received request to change agent interval to '{new_interval}' for MQTT-JSON.")
+    if not re.match(r"^\d+[smh]$", new_interval):
+        error_message = f"Invalid interval format: '{new_interval}'."
+        safe_error_message = quote(error_message)
+        return RedirectResponse(url=f"/telegraf-mqtt-json?error={safe_error_message}", status_code=303)
+    
+    try:
+        await change_agent_interval(new_interval, SHARED_MQTT_JSON_CONFIG_PATH)
+        container.restart(timeout=30)
+    except Exception as e:
+        safe_error_message = quote(f"Failed to update interval or restart container: {e}")
+        return RedirectResponse(url=f"/telegraf-mqtt-json?error={safe_error_message}", status_code=303)
+        
+    return RedirectResponse(url="/telegraf-mqtt-json", status_code=303)
+
+@app.post("/telegraf-mqtt-json/restart", tags=["Telegraf-MQTT-JSON"])
+async def restart_telegraf_mqtt_json(
+    request: Request,
+    container: docker.models.containers.Container = Depends(get_telegraf_mqtt_json_container)
+):
+    """Restarts the Telegraf-MQTT-JSON container."""
+    logger.info(f"Received restart request for container '{container.name}'.")
+    try:
+        container.restart(timeout=30)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to restart container: {e}")
+    return RedirectResponse(url="/telegraf-mqtt-json", status_code=303)
+
+@app.post("/telegraf-mqtt-json/stop", tags=["Telegraf-MQTT-JSON"])
+async def stop_telegraf_mqtt_json(
+    request: Request,
+    container: docker.models.containers.Container = Depends(get_telegraf_mqtt_json_container)
+):
+    """Stops the Telegraf-MQTT-JSON container."""
+    logger.info(f"Received stop request for container '{container.name}'.")
+    try:
+        container.stop(timeout=10)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to stop container: {e}")
+    return RedirectResponse(url="/telegraf-mqtt-json", status_code=303)
+
+@app.post("/telegraf-mqtt-json/start", tags=["Telegraf-MQTT-JSON"])
+async def start_telegraf_mqtt_json(
+    request: Request,
+    container: docker.models.containers.Container = Depends(get_telegraf_mqtt_json_container)
+):
+    """Starts the Telegraf-MQTT-JSON container."""
+    logger.info(f"Received start request for container '{container.name}'.")
+    try:
+        container.start()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start container: {e}")
+    return RedirectResponse(url="/telegraf-mqtt-json", status_code=303)
+
+@app.post("/telegraf-mqtt-json/upload-config", tags=["Telegraf-MQTT-JSON"])
+async def upload_telegraf_config_mqtt_json(
+    file: UploadFile = File(...),
+    container: docker.models.containers.Container = Depends(get_telegraf_mqtt_json_container)
+):
+    """Uploads a new 'telegraf.conf' for the MQTT-JSON instance."""
+    logger.info(f"Received config upload for MQTT-JSON: '{file.filename}'.")
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    try:
+        async with aiofiles.open(SHARED_MQTT_JSON_CONFIG_PATH, "wb") as f:
+            await f.write(content)
+        container.reload()
+        if container.status == 'running':
+            container.restart()
+        else:
+            container.start()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to write config or apply to container: {e}")
+        
+    return RedirectResponse(url="/telegraf-mqtt-json", status_code=303)
+
+
+@app.post("/telegraf-mqtt-json/upload-csv", tags=["Telegraf-MQTT-JSON"])
+async def upload_csv_for_config_mqtt_json(
+    file: UploadFile = File(...),
+    mqtt_broker: str = Form("tcp://mosquitto:1883"),
+    influxdb_url: str = Form("http://influxdb:8086"),
+    container: docker.models.containers.Container = Depends(get_telegraf_mqtt_json_container)
+):
+    logger.info(f"Received CSV upload for MQTT-JSON config generation: {file.filename}")
+    content = await file.read()
+    if not content:
+        return RedirectResponse(url=f"/telegraf-mqtt-json?error={quote('Empty file')}", status_code=303)
+
+    # Backup and write new CSV
+    try:
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_path = os.path.join(SHARED_MQTT_JSON_PATH, f"nodes-mqtt-json_backup_{timestamp}.csv")
+        if os.path.exists(SHARED_MQTT_JSON_NODES_PATH):
+            os.rename(SHARED_MQTT_JSON_NODES_PATH, backup_path)
+        with open(SHARED_MQTT_JSON_NODES_PATH, 'wb') as f:
+            f.write(content)
+    except Exception as e:
+        logger.error(f"Failed to write uploaded CSV for MQTT-JSON: {e}", exc_info=True)
+        return RedirectResponse(url=f"/telegraf-mqtt-json?error={quote('Failed to write CSV file')}", status_code=303)
+
+    # Generate config
+    try:
+        generator = TelegrafMqttJsonConfigGenerator(
+            csv_file_path=SHARED_MQTT_JSON_NODES_PATH,
+            output_file_path=SHARED_MQTT_JSON_CONFIG_PATH,
+            mqtt_broker=mqtt_broker,
+            influxdb_url=influxdb_url
+        )
+        generator.run()
+    except Exception as e:
+        logger.error(f"Config generation failed for MQTT-JSON: {e}", exc_info=True)
+        return RedirectResponse(url=f"/telegraf-mqtt-json?error={quote(f'Config generation failed: {e}')}", status_code=303)
+
+    # Apply config by restarting container
+    try:
+        container.reload()
+        if container.status == 'running':
+            container.restart(timeout=30)
+        else:
+            container.start()
+    except Exception as e:
+        return RedirectResponse(url=f"/telegraf-mqtt-json?error={quote(f'Config generated, but apply failed: {e}')}", status_code=303)
+
+    return RedirectResponse(url="/telegraf-mqtt-json?success=csv_uploaded", status_code=303)
+
+@app.get("/export_nodes_csv_mqtt_json")
+async def export_nodes_csv_mqtt_json():
+    logger.info("Exporting nodes-mqtt-json.csv file.")
+    if not os.path.exists(SHARED_MQTT_JSON_NODES_PATH):
+        raise HTTPException(status_code=404, detail="nodes-mqtt-json.csv not found.")
+    return FileResponse(SHARED_MQTT_JSON_NODES_PATH, filename="nodes-mqtt-json.csv")
+
+@app.get("/csvdata-mqtt-json", response_class=HTMLResponse, tags=["CSV-MQTT-JSON"])
+async def get_csv_data_mqtt_json(request: Request):
+    if not os.path.exists(SHARED_MQTT_JSON_NODES_PATH):
+        raise HTTPException(status_code=404, detail="CSV file not found.")
+    
+    with open(SHARED_MQTT_JSON_NODES_PATH, 'r', encoding='utf-8') as f:
+        reader = csv.reader(f)
+        headers = next(reader, None)
+        rows = list(reader)
     
     return templates.TemplateResponse("csv_table.html", {
         "request": request,
