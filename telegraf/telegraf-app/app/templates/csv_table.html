@@ -49,9 +49,12 @@
 </head>
 <body>
     <h1>CSV Data Table</h1>
-    <a href="/">
+    <!-- <a href="/">
         <Button>Back to Telegraf Manager</Button>
-    </a>
+    </a> -->
+    <a href="/"><button>Switch to Main Telegraf Manager</button></a>
+    <a href="/telegraf-test"><button>Switch to MQTT Inputs Manager</button></a>
+    <a href="/telegraf-mqtt-json"><button>Switch to MQTT-JSON Inputs Manager</button></a>
     {% if headers %}
         <table>
             <thead>
